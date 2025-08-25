@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Memory Card Game</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            text-align: center;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            color: #4a4a4a;
+        }
+
+        #controls {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #start-button,
+        #difficulty-select {
+            font-size: 1rem;
+            padding: 8px 16px;
+            border: 2px solid #5d5d5d;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #ffffff;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        #start-button:hover,
+        #difficulty-select:hover {
+            background-color: #e2e2e2;
+        }
+
+        #start-button:active {
+            transform: scale(0.98);
+        }
+
+        #timer {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #007bff;
+        }
+
+        #high-score {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #5d5d5d;
+        }
+
+        .game-board {
+            display: grid;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 15px;
+            background-color: #e9ecef;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Grid layouts for different difficulties */
+        .game-board.easy {
+            grid-template-columns: repeat(4, 100px);
+        }
+
+        .game-board.medium {
+            grid-template-columns: repeat(5, 100px);
+        }
+
+        .game-board.hard {
+            grid-template-columns: repeat(6, 100px);
+        }
+
+        .card {
+            width: 100px;
+            height: 100px;
+            background-color: #6a0dad;
+            color: white;
+            font-size: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            border-radius: 10px;
+            user-select: none;
+            transition: transform 0.2s, background-color 0.2s;
+        }
+
+        .card:hover {
+            transform: scale(1.05);
+        }
+
+        .card.flipped {
+            background-color: #ffffff;
+            color: black;
+            cursor: default;
+        }
+
+        .card.matched {
+            background-color: #4CAF50;
+            /* A brighter green for matched cards */
+            color: white;
+            cursor: default;
+            transform: scale(1);
+        }
+
+        #message {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #28a745;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- ==================== -->
+    <!-- === HTML Structure === -->
+    <!-- ==================== -->
+
+    <h1>Memory Card Game</h1>
+    <div id="controls">
+        <select id="difficulty-select">
+            <option value="easy">Easy (4x4)</option>
+            <option value="medium">Medium (5x4)</option>
+            <option value="hard">Hard (6x6)</option>
+        </select>
+        <button id="start-button">Start Game</button>
+    </div>
+    <div id="timer">Time: 0s</div>
+    <div id="high-score">High Score: N/A</div>
+    <div class="game-board" id="game-board"></div>
+    <p id="message"></p>
+
+    <!-- Confetti library for the winning effect -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+    <script>
+        // ========================
+        // === JavaScript Logic ===
+        // ========================
+
+        // Game asset and state variables
+        const emojis = ["🩷", "❤", "🧡", "💛", "💚", "🩵", "💙", "💜", "💖", "🤍", "🖤", "🌈"];
+        const board = document.getElementById("game-board");
+        const timerDisplay = document.getElementById("timer");
+        const message = document.getElementById("message");
+        const startButton = document.getElementById("start-button");
+        const difficultySelect = document.getElementById("difficulty-select");
+        const highScoreDisplay = document.getElementById("high-score");
+
+        let cards = [];
+        let flippedCards = [];
+        let matchedCount = 0;
+        let time = 0;
+        let timeInterval;
+        let gameStarted = false;
+
+        // Display high score from localStorage on page load
+        const storedHighScore = localStorage.getItem('memoryHighScore');
+        if (storedHighScore) {
+            highScoreDisplay.textContent = `High Score: ${storedHighScore}s`;
+        }
+
+        // Function to initialize or reset the game
+        function initGame() {
+            // Clear the board and reset game state
+            board.innerHTML = "";
+            flippedCards = [];
+            matchedCount = 0;
+            time = 0;
+            timerDisplay.textContent = "Time: 0s";
+            message.textContent = "";
+            startButton.textContent = "Restart Game";
+            board.classList.remove('easy', 'medium', 'hard'); // Clear previous difficulty
+
+            // Determine the card set and grid layout based on difficulty
+            const difficulty = difficultySelect.value;
+            let cardSet = [];
+
+            switch (difficulty) {
+                case "easy":
+                    cardSet = emojis.slice(0, 8); // 8 pairs, 16 cards
+                    board.classList.add('easy');
+                    break;
+                case "medium":
+                    cardSet = emojis.slice(0, 10); // 10 pairs, 20 cards
+                    board.classList.add('medium');
+                    break;
+                case "hard":
+                    cardSet = emojis.slice(0, 12); // 12 pairs, 24 cards
+                    board.classList.add('hard');
+                    break;
+            }
+
+            // Create a shuffled deck of cards
+            cards = [...cardSet, ...cardSet];
+            cards.sort(() => Math.random() - 0.5);
+
+            // Create and append the cards to the board
+            cards.forEach(emoji => {
+                const card = createCard(emoji);
+                board.appendChild(card);
+            });
+
+            // Start the timer
+            clearInterval(timeInterval);
+            timeInterval = setInterval(() => {
+                time++;
+                timerDisplay.textContent = `Time: ${time}s`;
+            }, 1000);
+
+            gameStarted = true;
+        }
+
+        // Function to create a single card element
+        function createCard(emoji) {
+            const card = document.createElement("div");
+            card.classList.add("card");
+            card.dataset.emoji = emoji;
+            card.textContent = "❓";
+
+            // Add click event listener to each card
+            card.addEventListener("click", () => {
+                // Return if game is not started, card is already flipped/matched, or two cards are already flipped
+                if (!gameStarted || card.classList.contains("flipped") || card.classList.contains("matched") || flippedCards.length === 2) {
+                    return;
+                }
+
+                card.classList.add("flipped");
+                card.textContent = emoji;
+                flippedCards.push(card);
+
+                if (flippedCards.length === 2) {
+                    checkMatch();
+                }
+            });
+            return card;
+        }
+
+        // Function to check if the two flipped cards are a match
+        function checkMatch() {
+            const [card1, card2] = flippedCards;
+            const isMatch = card1.dataset.emoji === card2.dataset.emoji;
+
+            if (isMatch) {
+                // If it's a match, mark cards as matched and check for win
+                card1.classList.add("matched");
+                card2.classList.add("matched");
+                matchedCount += 2;
+                flippedCards = [];
+
+                if (matchedCount === cards.length) {
+                    clearInterval(timeInterval);
+                    handleWin();
+                }
+            } else {
+                // If it's not a match, flip cards back after a delay
+                setTimeout(() => {
+                    card1.classList.remove("flipped");
+                    card2.classList.remove("flipped");
+                    card1.textContent = "❓";
+                    card2.textContent = "❓";
+                    flippedCards = [];
+                }, 1000);
+            }
+        }
+
+        // Function to handle the winning state
+        function handleWin() {
+            // Display a winning message
+            message.textContent = `🎉 You Win! Time: ${time}s`;
+
+            // Trigger the confetti effect
+            confetti({
+                particleCount: 150,
+                spread: 120,
+                origin: { y: 0.6 }
+            });
+
+            // Check and update the high score using localStorage
+            const currentHighScore = localStorage.getItem('memoryHighScore');
+            if (!currentHighScore || time < parseInt(currentHighScore)) {
+                localStorage.setItem('memoryHighScore', time);
+                highScoreDisplay.textContent = `High Score: ${time}s (New Record!)`;
+            }
+
+            gameStarted = false;
+            startButton.textContent = "Play Again";
+        }
+
+        // Add event listener to the start button to begin the game
+        startButton.addEventListener("click", initGame);
+
+        // Initial message on page load
+        message.textContent = "Select difficulty and press Start.";
+    </script>
+</body>
+
+</html>
